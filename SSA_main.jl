@@ -22,9 +22,9 @@ struct Limits
 end
 
 # intialize parameters
-M = 300
+M = 1000
 N = 5
-L = 2^15
+L = 1000
 
 # state density mean and variance
 μ = 7.5 
@@ -51,13 +51,32 @@ SSA_limits = Limits(Ulim, α, ϵ, δ)
 
 # intialize state array
 state = CUDA.fill(1.0f0, (2,L,N))
-u = CUDA.fill(0.0f0, L)
+# fill state array with intial particle density
+state[:,:,1] = Ξ
+
+# initalize input array
+u = CUDA.fill(0.0f0, L,N)
 
 # generate random noise sequence Wprime for time horizon N for 
 # state density with num particles L
 w = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
-
+w2 = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
 
 # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
+launch_xprime_kernel!(state, N, w, u)
 
-@benchmark launch_xprime_kernel!($state, $N, $w)
+
+
+cost = CUDA.fill(0.0f0, L)
+state_2prime = CUDA.fill(0.0f0, (2,M,N))
+
+t1 = time()
+for i = 1:L
+    xk2prime!(SSA_params, Ξ, state_2prime, u, w2, i)
+    # TODO: check feasability/constraint violations
+    launch_cost_kernel!(N, M, state_2prime, u, cost, i)
+end
+elapsed_time = time()-t1
+println(elapsed_time)
+
+findmin(cost)

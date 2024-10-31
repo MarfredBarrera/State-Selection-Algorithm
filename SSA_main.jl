@@ -22,9 +22,9 @@ struct Limits
 end
 
 # intialize parameters
-M = 1500
+M = 1000
 N = 5
-L = 1500
+L = 1000
 
 # state density mean and variance
 μ = 7.5 
@@ -66,32 +66,17 @@ w2 = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
 launch_xprime_kernel!(state, N, w, u)
 
 
+
 cost = CUDA.fill(0.0f0, L)
 state_2prime = CUDA.fill(0.0f0, (2,M,N))
 
-
-
-function xk2prime(SSA_params, Ξ, state, u, w2)
-
-    L = SSA_params.L
-    M = SSA_params.M 
-    N = SSA_params.N
-
-    for i = 1:L
-        # for each particle in the state density, randomly sample M particles
-        local mc_sample_index = (rand(1:L, M))
-        state[:,:,1] = Ξ[:,mc_sample_index]
-
-        # calculate M sampled trajectories
-        kernel = @cuda launch=false monte_carlo_sampling_kernel!(N, M, Ξ, state, u, w2,i)
-        config = launch_configuration(kernel.fun)
-        threads = min(length(state), config.threads)
-        blocks = cld(length(state), threads)
-
-        CUDA.@sync begin
-            kernel(N, M, Ξ, state, u, w2, i; threads, blocks)
-        end
-    end
+t1 = time()
+for i = 1:L
+    xk2prime!(SSA_params, Ξ, state_2prime, u, w2, i)
+    # TODO: check feasability/constraint violations
+    launch_cost_kernel!(N, M, state_2prime, u, cost, i)
 end
+elapsed_time = time()-t1
+println(elapsed_time)
 
-@benchmark xk2prime(SSA_params, Ξ, state_2prime, u, w2)
+findmin(cost)

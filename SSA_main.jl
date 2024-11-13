@@ -19,12 +19,23 @@ struct Limits
     α :: Float32
     ϵ :: Float32
     δ :: Float64
+
+    x1_upperlim :: Float64
+    x1_lowerlim :: Float64
+    y1_upperlim :: Float64
+    y1_lowerlim :: Float64
+
+    x2_upperlim :: Float64
+    x2_lowerlim :: Float64
+    y2_upperlim :: Float64
+    y2_lowerlim :: Float64
 end
 
+
 # intialize parameters
-M = 1000
+M = 3000
 N = 5
-L = 1000
+L = 3000
 
 # state density mean and variance
 μ = 7.5 
@@ -35,48 +46,37 @@ L = 1000
 v = 0.5
 
 Ulim = 3
-α = 0.1
+α = 0.10
 ϵ = 0.3
 δ = 0.001
+
+# state constraints
+x1_upperlim = 5
+x1_lowerlim = 3
+y1_upperlim = 2
+y1_lowerlim = -4
+
+x2_upperlim = 5
+x2_lowerlim = -2
+y2_upperlim = -4
+y2_lowerlim = - 7
+ 
 
 # store parameters in struct
 SSA_params = Params(M, N, L)
 SSA_gauss  = Gaussians(μ, Σ, ω, v)
-SSA_limits = Limits(Ulim, α, ϵ, δ)
+SSA_limits = Limits(Ulim, α, ϵ, δ, 
+    x1_upperlim, x1_lowerlim, 
+    y1_upperlim, y1_lowerlim,
+    x2_upperlim, x2_lowerlim, 
+    y2_upperlim, y2_lowerlim)
 
 # generate state density Xi according to Gaussian parameters
 (Ξ_gaussian, W_gaussian, V_gaussian) = init_gaussians()
 Ξ = gpu_generate_Xi(SSA_params.L)
 
-
-# intialize state array
-state = CUDA.fill(1.0f0, (2,L,N))
-# fill state array with intial particle density
-state[:,:,1] = Ξ
-
-# initalize input array
-u = CUDA.fill(0.0f0, L,N)
-
-# generate random noise sequence Wprime for time horizon N for 
-# state density with num particles L
-w = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
-w2 = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
-
-# ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
-launch_xprime_kernel!(state, N, w, u)
+@benchmark candidate_state = state_selection_algorithm(Ξ)
+# elapsed_time = time()-t1
+# println(elapsed_time)
 
 
-
-cost = CUDA.fill(0.0f0, L)
-state_2prime = CUDA.fill(0.0f0, (2,M,N))
-
-t1 = time()
-for i = 1:L
-    xk2prime!(SSA_params, Ξ, state_2prime, u, w2, i)
-    # TODO: check feasability/constraint violations
-    launch_cost_kernel!(N, M, state_2prime, u, cost, i)
-end
-elapsed_time = time()-t1
-println(elapsed_time)
-
-findmin(cost)

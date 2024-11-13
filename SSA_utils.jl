@@ -154,15 +154,16 @@ function xk2prime!(SSA_params, Ξ, state, u, w2, i)
     end
 end
 
-# cost kernel launcher
-function launch_cost_kernel!(T, M, state, u, cost, i)
-    kernel = @cuda launch=false cost_kernel!(T,M,state,u,cost,i)
+# function: launch_master_kernel
+# objective: launch kernel for cost and violation rate calculation
+function launch_master_kernel!(SSA_limits, T, M, state, u, cost, state_violation_rate, control_violation_rate, i)
+    kernel = @cuda launch=false master_kernel!(SSA_limits, T,M,state,u,cost,state_violation_rate, control_violation_rate,i)
     config = launch_configuration(kernel.fun)
     threads = min(M, config.threads)
     blocks = cld(M, threads)
 
     CUDA.@sync begin
-        kernel(T,M,state,u,cost,i; threads, blocks)
+        kernel(SSA_limits, T,M,state,u,cost,state_violation_rate, control_violation_rate, i; threads, blocks)
     end
 end
 
@@ -176,4 +177,101 @@ function cost_kernel!(T,M,state,u,cost,i)
             cost[i] += state[1,j,t]^2 + state[2,j,t]^2 + u[i,t]^2
         end
     end
+
+    return
+end
+
+# function: master_kernel!
+# objective: from M number of x'' trajectories, calculate cost and violation rates simultaneously
+function master_kernel!(SSA_limits, T,M,state,u,cost,state_violation_rate, control_violation_rate, i)
+    cost_kernel!(T,M,state,u,cost,i)
+    constraint_violation_kernel!(SSA_limits, T,M,state,u,state_violation_rate, control_violation_rate, i)
+    return
+end
+
+# function: constraint_violation_kernel!
+# objective: calculate constraint violation rates
+function constraint_violation_kernel!(SSA_limits, T,M,state,u,state_violation_rate, control_violation_rate, i)
+    # unpack SSA_limits struct
+    Ulim = SSA_limits.Ulim
+    x1_upperlim = SSA_limits.x1_upperlim
+    x1_lowerlim = SSA_limits.x1_lowerlim
+    y1_upperlim = SSA_limits.y1_upperlim
+    y1_lowerlim = SSA_limits.y1_lowerlim
+    x2_upperlim = SSA_limits.x2_upperlim
+    x2_lowerlim = SSA_limits.x2_upperlim
+    y2_upperlim = SSA_limits.y2_lowerlim
+    y2_lowerlim = SSA_limits.y2_upperlim
+
+    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
+    stride = gridDim().x * blockDim().x
+
+    # compare each trajectory with input and state constraints
+    for j = index:stride:M
+        for t = 1:T
+            if(u[i,t] > Ulim)
+                control_violation_rate[i] += 1
+            end
+            if((state[1,j,t] > x1_lowerlim && state[1,j,t] < x1_upperlim) ||
+                (state[2,j,t] > y1_lowerlim && state[2,j,t] < y1_upperlim) ||
+                (state[1,j,t] > x2_lowerlim && state[1,j,t] < x2_upperlim) ||
+                (state[2,j,t] > y2_lowerlim && state[2,j,t] < y2_upperlim))
+                state_violation_rate[i] += 1
+            end
+        end
+    end
+    return
+end
+
+
+function state_selection_algorithm(Ξ)
+    # intialize state array
+    state = CUDA.fill(1.0f0, (2,L,N))
+    # fill state array with intial particle density
+    state[:,:,1] = Ξ
+
+    # initalize input array
+    u = CUDA.fill(0.0f0, L,N)
+
+    # generate random noise sequence Wprime for time horizon N for 
+    # state density with num particles L
+    w = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
+    w2 = ((gpu_sample_gaussian_distribution(0, ω, (2,L,N))))
+
+    # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
+    launch_xprime_kernel!(state, N, w, u)
+
+
+    # declare vectors for x'' trajectories, cost, and constrain rate calculations
+    cost = CUDA.fill(0.0f0, L)
+    state_violation_rate = CUDA.fill(0.0f0,L)
+    control_violation_rate = CUDA.fill(0.0f0,L)
+    state_2prime = CUDA.fill(0.0f0, (2,M,N))
+
+
+    # iterate through each particle in Ξ and run M monte carlo simulations for each particle 
+    for i = 1:L
+
+        # calculate x'' trajectories
+        xk2prime!(SSA_params, Ξ, state_2prime, u, w2, i)
+
+        # calculate cost and state/control violation rates
+        launch_master_kernel!(SSA_limits, N, M, state_2prime, u, cost, state_violation_rate, control_violation_rate, i)
+    end
+
+    # sample-average violation rate counts
+    state_violation_rate /= M
+    control_violation_rate /= M
+
+    
+    state_feasibility_mask = state_violation_rate .< α
+    control_feasibility_mask = control_violation_rate .< α
+
+    # mask for feasible states
+    feasibility_mask = state_feasibility_mask .& control_feasibility_mask
+
+    # find feasible state with minimum cost
+    cost_val, candidate_index = findmin(cost[feasibility_mask])
+
+    return Array(Ξ)[:,candidate_index,1]
 end

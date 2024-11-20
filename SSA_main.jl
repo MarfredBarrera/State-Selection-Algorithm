@@ -1,9 +1,11 @@
 include("SSA_utils.jl")
+include("SSA_particle_filter.jl")
 
 struct Params
     M :: Int64
     N :: Int64
     L :: Int64
+    n :: Int32
 end
 struct Gaussians
     # state density with mean and variance
@@ -33,9 +35,10 @@ end
 
 
 # intialize parameters
-M = 3000
+M = 1000
 N = 5
 L = 3000
+n = 2
 
 # state density mean and variance
 μ = 7.5 
@@ -46,8 +49,8 @@ L = 3000
 v = 0.5
 
 Ulim = 3
-α = 0.10
-ϵ = 0.3
+α = 0.05
+ϵ = 0.15
 δ = 0.001
 
 # state constraints
@@ -63,7 +66,7 @@ y2_lowerlim = - 7
  
 
 # store parameters in struct
-SSA_params = Params(M, N, L)
+SSA_params = Params(M, N, L, n)
 SSA_gauss  = Gaussians(μ, Σ, ω, v)
 SSA_limits = Limits(Ulim, α, ϵ, δ, 
     x1_upperlim, x1_lowerlim, 
@@ -73,10 +76,8 @@ SSA_limits = Limits(Ulim, α, ϵ, δ,
 
 # generate state density Xi according to Gaussian parameters
 (Ξ_gaussian, W_gaussian, V_gaussian) = init_gaussians()
-Ξ = gpu_generate_Xi(SSA_params.L)
+Ξ = gpu_generate_Xi(SSA_params.L, SSA_params.n)
 
-@benchmark candidate_state = state_selection_algorithm(Ξ)
-# elapsed_time = time()-t1
-# println(elapsed_time)
+@benchmark CUDA.@sync candidate_state = state_selection_algorithm(Ξ,SSA_params,SSA_limits)
 
 

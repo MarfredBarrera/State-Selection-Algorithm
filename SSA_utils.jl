@@ -34,14 +34,14 @@ end
 # input: L = number of particles
 # output: Ξ₀ = Array of randomly sampled states, size: [2 x L]
 ###
-function gpu_generate_Xi(L :: Int64)
+function gpu_generate_Xi(L :: Int64, n :: Int32)
     # Gaussian Density with mean vector μ_x0 and covariance matrix Σ_x0
     μ_x0 = CuArray([7.5,-7.5])
     Σ_x0 = (0.5*I)
 
     # randomly sample initial states Ξ following Gaussian density
-    Ξ₀ = CuArray{Float64}(undef,2,L)
-    Ξ₀ = μ_x0.+sqrt(Σ_x0)*CUDA.randn(2,L)
+    Ξ₀ = CuArray{Float64}(undef,n,L)
+    Ξ₀ = μ_x0.+sqrt(Σ_x0)*CUDA.randn(n,L)
     return (Ξ₀)
 end
 
@@ -167,6 +167,14 @@ function launch_master_kernel!(SSA_limits, T, M, state, u, cost, state_violation
     end
 end
 
+# function: master_kernel!
+# objective: from M number of x'' trajectories, calculate cost and violation rates simultaneously
+function master_kernel!(SSA_limits, T,M,state,u,cost,state_violation_rate, control_violation_rate, i)
+    cost_kernel!(T,M,state,u,cost,i)
+    constraint_violation_kernel!(SSA_limits, T,M,state,u,state_violation_rate, control_violation_rate, i)
+    return
+end
+
 # function: cost_kernel! - calculates the cost of M sampled trajectories for one particle
 function cost_kernel!(T,M,state,u,cost,i)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
@@ -178,14 +186,6 @@ function cost_kernel!(T,M,state,u,cost,i)
         end
     end
 
-    return
-end
-
-# function: master_kernel!
-# objective: from M number of x'' trajectories, calculate cost and violation rates simultaneously
-function master_kernel!(SSA_limits, T,M,state,u,cost,state_violation_rate, control_violation_rate, i)
-    cost_kernel!(T,M,state,u,cost,i)
-    constraint_violation_kernel!(SSA_limits, T,M,state,u,state_violation_rate, control_violation_rate, i)
     return
 end
 
@@ -224,9 +224,10 @@ function constraint_violation_kernel!(SSA_limits, T,M,state,u,state_violation_ra
 end
 
 
-function state_selection_algorithm(Ξ)
+function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
+    n = SSA_params.n
     # intialize state array
-    state = CUDA.fill(1.0f0, (2,L,N))
+    state = CUDA.fill(1.0f0, (n,L,N))
     # fill state array with intial particle density
     state[:,:,1] = Ξ
 
@@ -235,8 +236,8 @@ function state_selection_algorithm(Ξ)
 
     # generate random noise sequence Wprime for time horizon N for 
     # state density with num particles L
-    w = (gpu_sample_gaussian_distribution(0, ω, (2,L,N)))
-    w2 = ((gpu_sample_gaussian_distribution(0, ω, (2,L,N))))
+    w = (gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
+    w2 = ((gpu_sample_gaussian_distribution(0, ω, (n,L,N))))
 
     # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
     launch_xprime_kernel!(state, N, w, u)
@@ -246,7 +247,7 @@ function state_selection_algorithm(Ξ)
     cost = CUDA.fill(0.0f0, L)
     state_violation_rate = CUDA.fill(0.0f0,L)
     control_violation_rate = CUDA.fill(0.0f0,L)
-    state_2prime = CUDA.fill(0.0f0, (2,M,N))
+    state_2prime = CUDA.fill(0.0f0, (n,M,N))
 
 
     # iterate through each particle in Ξ and run M monte carlo simulations for each particle 

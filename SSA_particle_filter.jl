@@ -1,7 +1,7 @@
 include("SSA_dynamics.jl")
 using LinearAlgebra
 
-mutable struct Particle_Filter
+Base.@kwdef mutable struct Particle_Filter
     model::Model
     TimeUpdate::Function
     MeasurementUpdate::Function

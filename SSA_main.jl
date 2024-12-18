@@ -41,14 +41,14 @@ Base.@kwdef struct Limits
 end
 
 # intialize parameters
-M = 1000
-N = 5
-L = 3000
+M = 275
+N = 6
+L = 300
 n = 2
 T = 10
 
 # state density mean and variance
-μ = 7.5 
+μ = [3;-8]
 Σ = 0.5^2
 
 #  process noise variance ωₖ and scalar measurement noise variance vₖ
@@ -56,8 +56,8 @@ T = 10
 v = 0.3^2
 
 Ulim = 3
-α = 0.10
-ϵ = 0.20
+α = 0.20
+ϵ = 0.40
 δ = 0.01
 
 # state constraints
@@ -69,12 +69,13 @@ y1_lowerlim = -4
 x2_upperlim = 5
 x2_lowerlim = -2
 y2_upperlim = -4
-y2_lowerlim = -7
+y2_lowerlim = -5
+
  
 
 # store parameters in struct
 SSA_params = Params(M, N, L, n, T)
-SSA_gauss  = Gaussians(μ, Σ, ω, v)
+# SSA_gauss  = Gaussians(μ, Σ, ω, v)
 SSA_limits = Limits(Ulim, α, ϵ, δ, 
     x1_upperlim, x1_lowerlim, 
     y1_upperlim, y1_lowerlim,
@@ -83,8 +84,8 @@ SSA_limits = Limits(Ulim, α, ϵ, δ,
 
 # simulation parameters
 
-RUN_SIMULATIONS = false
-RUN_PLOTS = true
+RUN_SIMULATIONS = true
+RUN_PLOTS = false
 MARKER_SIZE = 1
 ANIMATE = false
 state_constraints = [
@@ -95,8 +96,9 @@ state_constraints = [
 global sim_data
 global x_candidate
 global violation_rate
+
 if(RUN_SIMULATIONS)
-    @btime global (x_candidate, sim_data) = run_simulation(T)
+    global (x_candidate, sim_data, violation_rate) = run_simulation(T)
 
 elseif(RUN_PLOTS)
 
@@ -118,6 +120,34 @@ elseif(RUN_PLOTS)
         animate_frame(i)
     end
     savefig("plot.png")
+end
+
+function run_conditional_mean_sim(T)
+
+    sim_data = fill(0.0f0, (n,L,T))
+    x_true = fill(0.0f0, (n,T))
+    violation_rate = fill(0.0f0,T)
+    x_mean = fill(0.0f0, (n,T))
+
+    # initialize dynamics
+    Q = Matrix{Float64}(I, 2, 2)
+    R = v
+    dynamics = Model(f,h,u,Q,R)
+    x_true = Array{Float64}(undef, n, T+1)
+
+    Ξ = gpu_generate_Xi(L,n,μ)
+
+    # initialize particle filter
+    likelihoods = Vector(fill(1,(L)))
+    pf = Particle_Filter(dynamics, TimeUpdate, MeasurementUpdate!, Resampler, likelihoods, Array(Ξ))
+    x_true[:,1] = μ.+ sqrt(Σ)*randn(2)
+
+    for t = 1:T
+        pf.particles = Array(Ξ)
+
+    end
+
+
 end
 
 

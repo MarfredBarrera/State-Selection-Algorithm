@@ -35,9 +35,9 @@ end
 # input: L = number of particles
 # output: Ξ₀ = Array of randomly sampled states, size: [2 x L]
 ###
-function gpu_generate_Xi(L :: Int64, n :: Int64)
+function gpu_generate_Xi(L :: Int64, n :: Int64, μ)
     # Gaussian Density with mean vector μ_x0 and covariance matrix Σ_x0
-    μ_x0 = CuArray([7.5,-7.5])
+    μ_x0 = CuArray(μ)
     Σ_x0 = (0.5*I)
 
     # randomly sample initial states Ξ following Gaussian density
@@ -112,17 +112,16 @@ end
 
 # function: launch_master_kernel!
 # objective: launch kernel for cost and violation rate calculation
-function launch_master_kernel!(SSA_limits, T, M, state, u, cost, sampled_state_violations, sampled_control_violations, i)
-    kernel = @cuda launch=false master_kernel!(SSA_limits, T,M,state,u,cost,sampled_state_violations, sampled_control_violations,i)
+function launch_master_kernel!(SSA_limits, T, M, state, u, sampled_cost, state_violation_count, i)
+    kernel = @cuda launch=false master_kernel!(SSA_limits, T, M, state, u, sampled_cost, state_violation_count, i)
     config = launch_configuration(kernel.fun)
     threads = min(M, config.threads)
     blocks = cld(M, threads)
 
     CUDA.@sync begin
-        kernel(SSA_limits, T,M,state,u,cost,sampled_state_violations, sampled_control_violations, i; threads, blocks)
+        kernel(SSA_limits, T, M, state, u, sampled_cost, state_violation_count, i; threads, blocks)
     end
 end
-
 
 # function: state_selection_algorithm
 # inputs:
@@ -148,12 +147,16 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     CUDA.@sync launch_xprime_kernel!(state, N, w, u)
 
     # declare vectors for x'' trajectories, cost, and constraint violation rate calculations
-    cost = CUDA.fill(0.0f0, L)
-    sampled_state_violations = CUDA.fill(0.0f0,M)
-    sampled_control_violations = CUDA.fill(0.0f0,M)
-    total_state_violations = fill(0.0f0,L)
-    total_control_violations = fill(0.0f0,L)
+    cost = fill(0.0f0, L)
+    sampled_costs = CUDA.fill(0.0f0, M,N)
+    state_violation_count = CUDA.fill(0.0f0, M,N)
+    sampled_state_violations = CUDA.fill(0.0f0,L,N)
+    sampled_control_violations = CUDA.fill(0.0f0,L,N)
+    total_state_violations = fill(false,L)
+    total_control_violations = fill(false,L)
     state_2prime = CUDA.fill(0.0f0, (n,M,N))
+
+
     Ξ = CuArray(Ξ)
     # iterate through each particle in Ξ and run M monte carlo simulations for each particle 
     for i = 1:L
@@ -162,32 +165,50 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
         CUDA.@sync launch_xk2prime_kernel!(SSA_params, Ξ, state_2prime, u, w2, i)
 
         # calculate cost and state/control violation rates
-        CUDA.@sync launch_master_kernel!(SSA_limits, N, M, state_2prime, u, cost, sampled_state_violations, sampled_control_violations, i)
+        CUDA.@sync launch_master_kernel!(SSA_limits, N, M, state_2prime, u, sampled_costs, state_violation_count, i)
 
-        total_state_violations[i] = sum(sampled_state_violations)/M
-        total_control_violations[i] = sum(sampled_control_violations)/M
+        # sum the sampled cost to calculate the cost of each L particles
+        cost[i] = sum(sampled_costs)
+
+        # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
+        sampled_state_violations[i,:] = sum(state_violation_count, dims=1)
+
+        # indicate which particles satisfy state constraints
+        total_state_violations[i] = all(sampled_state_violations[i,:]/M .< α)
+        # total_control_violations[i] = all(sampled_control_violations[i,:]/M .< α)
     end
-    state_feasibility_mask = total_state_violations .< α
-    control_feasibility_mask = total_control_violations .< α
+
 
     # mask for feasible states
-    feasibility_mask = state_feasibility_mask .& control_feasibility_mask
-    println(sum(feasibility_mask))
+    feasibility_mask = total_state_violations
+
+    # if there are no feasible states, the feasible set is empty and SSA cannot proceed
+    if(sum(feasibility_mask)==0)
+        error("Feasible set is empty!")
+    end
 
     u = Array(u)
 
     # find feasible state with minimum cost
     cost_val, candidate_index = findmin(cost[feasibility_mask])
-    return Array(Ξ)[:,candidate_index,1], u[candidate_index,1], candidate_index, feasibility_mask
+    println(cost_val,candidate_index, Array(Ξ)[:,candidate_index])
+
+
+    return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
 end
 
 
+## function: run_simulation(T)
+# input:
+#       T - run simulation for T time steps
+# objective: run the bootstrap particle filter in conjunction with the SSA for T time steps
 function run_simulation(T)
 
     sim_data = fill(0.0f0, (n,L,T))
     x_true = fill(0.0f0, (n,T))
     violation_rate = fill(0.0f0,T)
     x_candidate = fill(0.0f0, (n,T))
+
 
     # initialize dynamics
     Q = Matrix{Float64}(I, 2, 2)
@@ -197,13 +218,13 @@ function run_simulation(T)
 
     # generate state density Xi according to Gaussian parameters
     (Ξ_gaussian, W_gaussian, V_gaussian) = init_gaussians()
-    Ξ = gpu_generate_Xi(SSA_params.L, SSA_params.n)
+    Ξ = gpu_generate_Xi(SSA_params.L, SSA_params.n,μ)
 
 
     # initialize particle filter
     likelihoods = Vector(fill(1,(L)))
     pf = Particle_Filter(dynamics, TimeUpdate, MeasurementUpdate!, Resampler, likelihoods, Array(Ξ))
-    x_true[:,1] = [μ; -μ].+ sqrt(Σ)*randn(2)
+    x_true[:,1] = μ.+ sqrt(Σ)*randn(2)
 
     for t = 1:T
 
@@ -211,7 +232,7 @@ function run_simulation(T)
 
         # run the state selection algorithm for the particle density
         CUDA.@sync candidate_state, u_star, candidate_index, feasibility_mask = state_selection_algorithm(pf.particles,SSA_params,SSA_limits)
-        violation_rate[t] = (sum(feasibility_mask))/L
+        violation_rate[t] = (L-sum(feasibility_mask))/L
 
         x_candidate[:,t] = pf.particles[:,candidate_index]
     
@@ -219,6 +240,8 @@ function run_simulation(T)
             println("Feasible Set is Empty!!")
             break
         end
+
+        u_star = dynamics.u(candidate_state)
     
     
         ### run bootstrap particle filter
@@ -226,7 +249,7 @@ function run_simulation(T)
         w_true = sqrt(ω)*randn(2)
     
         # propagate particle density
-        pf.particles = pf.TimeUpdate(pf.particles, dynamics, u_star,w)
+        pf.particles = pf.TimeUpdate(pf.particles, dynamics, u_star, w)
        
         x_true[:,t+1] = dynamics.f(x_true[:,t], u_star, w_true)
     
@@ -239,6 +262,5 @@ function run_simulation(T)
         pf.Resampler(pf)
     end
 
-
-    return x_candidate, sim_data
+    return x_candidate, sim_data, violation_rate
 end

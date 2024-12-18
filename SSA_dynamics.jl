@@ -1,5 +1,5 @@
 
-mutable struct Model
+Base.@kwdef mutable struct Model
     f::Function
     h::Function
     u::Function

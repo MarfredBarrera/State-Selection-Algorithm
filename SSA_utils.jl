@@ -168,7 +168,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
         CUDA.@sync launch_master_kernel!(SSA_limits, N, M, state_2prime, u, sampled_costs, state_violation_count, i)
 
         # sum the sampled cost to calculate the cost of each L particles
-        cost[i] = sum(sampled_costs)
+        cost[i] = sum(xk2prime.^2)+sum(state[:,i,:].^2)
 
         # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
         sampled_state_violations[i,:] = sum(state_violation_count, dims=1)
@@ -275,9 +275,9 @@ end
 
 function check_constraints(x)
 
-    constraint_count = fill(0.0f0,L)
+    constraint_count = fill(0.0f0,size(x,2))
 
-    for i = 1:L
+    for i = eachindex(constraint_count)
         in_region1 = (x1_lowerlim < x[1,i] < x1_upperlim) && (y1_lowerlim < x[2,i] < y1_upperlim)
         in_region2 = (x2_lowerlim < x[1,i] < x2_upperlim) && (y2_lowerlim < x[2,i] < y2_upperlim)
 

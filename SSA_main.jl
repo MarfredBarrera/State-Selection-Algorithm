@@ -69,7 +69,7 @@ y1_lowerlim = -4
 x2_upperlim = 5
 x2_lowerlim = -2
 y2_upperlim = -4
-y2_lowerlim = -7
+y2_lowerlim = -6
 
  
 
@@ -82,7 +82,9 @@ SSA_limits = Limits(Ulim, α, ϵ, δ,
     x2_upperlim, x2_lowerlim, 
     y2_upperlim, y2_lowerlim)
 
-
+## Choose either:
+# State Selection Algorithm OR Conditional Mean Selection
+# Compute simulation data OR Plot simulation data
 RUN_SSA = false
 RUN_SIMULATIONS = false
 

@@ -40,25 +40,26 @@ Base.@kwdef struct Limits
     y2_lowerlim :: Float64
 end
 
-# intialize parameters
-M = 200
-N = 6
+Ulim = 3
+α = 0.20
+ϵ = 0.30
+δ = 0.01
 L = 500
+
+M = trunc(Int, 1/(2*(ϵ-α)^2)*log10(L/δ) + 50)
+
+# intialize parameters
+N = 6
 n = 2
 T = 20
 
 # state density mean and variance
-μ = [7.5;-7.5]
+μ = [8.5;-8.5]
 Σ = 0.5^2
 
 #  process noise variance ωₖ and scalar measurement noise variance vₖ
 ω = 0.3^2
 v = 0.3^2
-
-Ulim = 3
-α = 0.20
-ϵ = 0.40
-δ = 0.01
 
 # state constraints
 x1_upperlim = 5
@@ -69,9 +70,17 @@ y1_lowerlim = -4
 x2_upperlim = 5
 x2_lowerlim = -2
 y2_upperlim = -4
-y2_lowerlim = -6
+y2_lowerlim = -7
 
- 
+
+# initialize dynamics
+Q = Matrix{Float64}(I, 2, 2)
+R = v
+dynamics = Model(f,h,u,Q,R)
+
+# initialize particle filter
+likelihoods = Vector(fill(1,(L)))
+pf = Particle_Filter(dynamics, TimeUpdate, MeasurementUpdate!, Resampler, likelihoods, Array(Ξ))
 
 # store parameters in struct
 SSA_params = Params(M, N, L, n, T)
@@ -128,9 +137,9 @@ elseif(RUN_PLOTS)
     end
 
     if(RUN_CM)
-        savefig("cm_plot.png")
+        savefig("Saved_plots/cm_plot.png")
     elseif(RUN_SSA)
-        savefig("ssa_plot.png")
+        savefig("Saved_plots/ssa_plot.png")
     end
 
 end

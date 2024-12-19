@@ -29,11 +29,6 @@ function xprime_kernel_function!(state, T, w, u)
     return
 end
 
-# function xprime_cpu!(state,T,w,u)
-
-#     for i = 1:
-# end
-
 ## function: monte_carlo_sampling_kernel - kernel function that calculates M samples for one particle
 # inputs: T - time steps, M - sample number, state - initial state density, i - iterator through L
 #  u - input, w2 - randomly generated noise
@@ -88,18 +83,6 @@ function cost_kernel!(T,M,state,u,sampled_cost,i)
     return
 end
 
-# # function: cost_kernel! - calculates the cost of M sampled trajectories for one particle
-# function cost!(T,M,state,u,sampled_cost,cost,i)
-
-#     for j in 1:M
-#         for t in 1:T
-#             sampled_cost[j,t] = state[1,j,t]^2 + state[2,j,t]^2
-#         end
-#     end
-
-#     return
-# end
-
 # function: constraint_violation_kernel!
 # objective: calculate constraint violation rates
 function constraint_violation_kernel!(SSA_limits,T,M,state,u, state_violation_count, i)
@@ -117,16 +100,9 @@ function constraint_violation_kernel!(SSA_limits,T,M,state,u, state_violation_co
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
 
-    # compare each trajectory with input and state constraints
+    # compare each trajectory with state constraints
     for j = index:stride:M
         for t = 1:T
-            # if(u[i,t] > Ulim)
-            #     sampled_control_violations[i,t] += 1
-            # end
-            # if(((state[1,j,t] > x1_lowerlim && state[1,j,t] < x1_upperlim) && (state[2,j,t] > y1_lowerlim && state[2,j,t] < y1_upperlim)) ||
-            #     ((state[1,j,t] > x2_lowerlim && state[1,j,t] < x2_upperlim) && (state[2,j,t] > y2_lowerlim && state[2,j,t] < y2_upperlim)))
-            #     sampled_state_violations[i,t] += 1
-            # end
 
             in_region1 = (x1_lowerlim < state[1,j,t] < x1_upperlim) && (y1_lowerlim < state[2,j,t] < y1_upperlim)
             in_region2 = (x2_lowerlim < state[1,j,t] < x2_upperlim) && (y2_lowerlim < state[2,j,t] < y2_upperlim)

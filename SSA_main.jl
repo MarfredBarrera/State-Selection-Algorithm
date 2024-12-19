@@ -41,14 +41,14 @@ Base.@kwdef struct Limits
 end
 
 # intialize parameters
-M = 275
+M = 200
 N = 6
-L = 300
+L = 500
 n = 2
-T = 10
+T = 20
 
 # state density mean and variance
-μ = [3;-8]
+μ = [7.5;-7.5]
 Σ = 0.5^2
 
 #  process noise variance ωₖ and scalar measurement noise variance vₖ
@@ -69,7 +69,7 @@ y1_lowerlim = -4
 x2_upperlim = 5
 x2_lowerlim = -2
 y2_upperlim = -4
-y2_lowerlim = -5
+y2_lowerlim = -6
 
  
 
@@ -82,15 +82,17 @@ SSA_limits = Limits(Ulim, α, ϵ, δ,
     x2_upperlim, x2_lowerlim, 
     y2_upperlim, y2_lowerlim)
 
-# simulation parameters
+## Choose either:
+# State Selection Algorithm OR Conditional Mean Selection
+# Compute simulation data OR Plot simulation data
+RUN_SSA = false
+RUN_SIMULATIONS = false
 
-RUN_SIMULATIONS = true
-RUN_PLOTS = false
-MARKER_SIZE = 1
+# simulation parameters
+RUN_SSA ? RUN_CM = false : RUN_CM = true
+
+RUN_SIMULATIONS ? RUN_PLOTS = false : RUN_PLOTS = true
 ANIMATE = false
-state_constraints = [
-    rectangle_from_coords(x1_lowerlim,y1_lowerlim,x1_upperlim,y1_upperlim)
-    rectangle_from_coords(x2_lowerlim,y2_lowerlim,x2_upperlim,y2_upperlim)]
 
 # simulation state machine
 global sim_data
@@ -113,41 +115,25 @@ elseif(RUN_PLOTS)
         anim = @animate for i = 2:T
             animate_frame(i)
         end
-        gif(anim, "ssa.gif",fps=10)
+
+        if(RUN_CM)
+            gif(anim, "cm.gif",fps=10)
+        elseif(RUN_SSA)
+            gif(anim, "ssa.gif",fps=10)
+        end
     end
 
     for i = 2:T
         animate_frame(i)
     end
-    savefig("plot.png")
-end
 
-function run_conditional_mean_sim(T)
-
-    sim_data = fill(0.0f0, (n,L,T))
-    x_true = fill(0.0f0, (n,T))
-    violation_rate = fill(0.0f0,T)
-    x_mean = fill(0.0f0, (n,T))
-
-    # initialize dynamics
-    Q = Matrix{Float64}(I, 2, 2)
-    R = v
-    dynamics = Model(f,h,u,Q,R)
-    x_true = Array{Float64}(undef, n, T+1)
-
-    Ξ = gpu_generate_Xi(L,n,μ)
-
-    # initialize particle filter
-    likelihoods = Vector(fill(1,(L)))
-    pf = Particle_Filter(dynamics, TimeUpdate, MeasurementUpdate!, Resampler, likelihoods, Array(Ξ))
-    x_true[:,1] = μ.+ sqrt(Σ)*randn(2)
-
-    for t = 1:T
-        pf.particles = Array(Ξ)
-
+    if(RUN_CM)
+        savefig("cm_plot.png")
+    elseif(RUN_SSA)
+        savefig("ssa_plot.png")
     end
 
-
 end
+
 
 

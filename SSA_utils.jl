@@ -182,19 +182,19 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     # mask for feasible states
     feasibility_mask = total_state_violations
 
-    # if there are no feasible states, the feasible set is empty and SSA cannot proceed
-    if(sum(feasibility_mask)==0)
-        error("Feasible set is empty!")
-    end
-
     u = Array(u)
 
-    # find feasible state with minimum cost
-    cost_val, candidate_index = findmin(cost[feasibility_mask])
-    println(cost_val,candidate_index, Array(Ξ)[:,candidate_index])
-
-
-    return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
+    
+    if(sum(feasibility_mask)==0) # if there are no feasible states, the feasible set is empty and SSA cannot proceed
+        println("Feasible set is empty!")
+        cost_val,candidate_index = findmin(cost)
+        return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
+    else # otherwise, find feasible state with minimum cost
+        cost_val, candidate_index = findmin(cost[feasibility_mask])
+        # println(cost_val,candidate_index, Array(Ξ)[:,candidate_index])
+        return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
+    end
+    return
 end
 
 
@@ -230,19 +230,27 @@ function run_simulation(T)
 
         sim_data[:,:,t] = pf.particles
 
-        # run the state selection algorithm for the particle density
-        CUDA.@sync candidate_state, u_star, candidate_index, feasibility_mask = state_selection_algorithm(pf.particles,SSA_params,SSA_limits)
-        violation_rate[t] = (L-sum(feasibility_mask))/L
-
-        x_candidate[:,t] = pf.particles[:,candidate_index]
-    
-        if(isinf(u_star)||isnan(u_star))
-            println("Feasible Set is Empty!!")
-            break
+        if(RUN_SSA) # run the state selection algorithm for the particle density
+            CUDA.@sync candidate_state, u_star, candidate_index, feasibility_mask = state_selection_algorithm(pf.particles,SSA_params,SSA_limits)
+            # violation_rate[t] = (L-sum(feasibility_mask))/L
+            x_candidate[:,t] = pf.particles[:,candidate_index]
+            if(isinf(u_star)||isnan(u_star))
+                println("Feasible Set is Empty!!")
+                break
+            end
+        elseif(RUN_CM) # choose the conditional mean as the state estimates
+            x_candidate[:,t] = mean(pf.particles, dims = 2)
+            candidate_state = x_candidate[:,t]
+        else
+            error("Please choose a state selection type to simulate")
         end
 
+        violation_rate[t] = sum(check_constraints(pf.particles))/L
+
+        println(violation_rate[t])
+
+        # controller based on selected_state
         u_star = dynamics.u(candidate_state)
-    
     
         ### run bootstrap particle filter
         w = Array(gpu_sample_gaussian_distribution(0, ω, (n,L,1)))
@@ -263,4 +271,20 @@ function run_simulation(T)
     end
 
     return x_candidate, sim_data, violation_rate
+end
+
+function check_constraints(x)
+
+    constraint_count = fill(0.0f0,L)
+
+    for i = 1:L
+        in_region1 = (x1_lowerlim < x[1,i] < x1_upperlim) && (y1_lowerlim < x[2,i] < y1_upperlim)
+        in_region2 = (x2_lowerlim < x[1,i] < x2_upperlim) && (y2_lowerlim < x[2,i] < y2_upperlim)
+
+        if(in_region1||in_region2)
+            constraint_count[i] = 1
+        end
+    end
+
+    return constraint_count
 end

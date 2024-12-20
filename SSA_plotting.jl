@@ -1,4 +1,5 @@
 using Plots
+using LaTeXStrings
 MARKER_SIZE = 1.5
 
 
@@ -33,5 +34,8 @@ function animate_frame(i)
     plot!(state_constraints[:,1], state_constraints[:,2],
         label = false,
         lc=:black)
+
+    xlabel!(L"z_k")
+    ylabel!(L"h_k")
 
 end

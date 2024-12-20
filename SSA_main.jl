@@ -40,12 +40,13 @@ end
 
 ## Choose:
 # 1) Either State Selection Algorithm OR Conditional Mean Selection
-RUN_SSA = true
+RUN_SSA = false
 # 2) Either compute simulation data OR plot simulation data
-COMPUTE_SIM_DATA = true
+COMPUTE_SIM_DATA = false
 
 # simulation parameters
 RUN_SSA ? RUN_CM = false : RUN_CM = true
+
 
 COMPUTE_SIM_DATA ? RUN_PLOTS = false : RUN_PLOTS = true
 ANIMATE = false
@@ -64,7 +65,7 @@ n = 2
 T = 20
 
 # state density mean and variance
-μ = [8;-8]
+μ = [7.75;-7.75]
 Σ = 0.5^2
 
 #  process noise variance ωₖ and scalar measurement noise variance vₖ
@@ -94,7 +95,6 @@ pf = Particle_Filter(dynamics, TimeUpdate, MeasurementUpdate!, Resampler, likeli
 
 # store parameters in struct
 SSA_params = Params(M, N, L, n, T)
-# SSA_gauss  = Gaussians(μ, Σ, ω, v)
 SSA_limits = Limits(Ulim, α, ϵ, δ, 
     x1_upperlim, x1_lowerlim, 
     y1_upperlim, y1_lowerlim,
@@ -106,12 +106,10 @@ global sim_data
 global x_candidate
 global violation_rate
 
-global ssa_data = Array{Float64}(undef)
-global cm_data = Array{Float64}(undef)
+global ssa_data
+global cm_data
 if(COMPUTE_SIM_DATA)
     global (x_candidate, sim_data, violation_rate) = run_simulation(T)
-
-    
     if(RUN_SSA)
         ssa_data = violation_rate
         display_name = "State Selection Algorithm"
@@ -129,10 +127,12 @@ if(COMPUTE_SIM_DATA)
 
 elseif(RUN_PLOTS)
 
+    # store rectangle coordinatse
     state_constraints = [
     rectangle_from_coords(x1_lowerlim,y1_lowerlim,x1_upperlim,y1_upperlim)
     rectangle_from_coords(x2_lowerlim,y2_lowerlim,x2_upperlim,y2_upperlim)]
 
+    # plot initial particle density
     plot(sim_data[1,:,1],sim_data[2,:,1],seriestype=:scatter,label=false,ms=MARKER_SIZE)
     scatter
     scatter!((x_candidate[1,1], x_candidate[2,1]),
@@ -140,6 +140,7 @@ elseif(RUN_PLOTS)
     mc =:red,
     z_order=:front)
 
+    # make GIF
     if(ANIMATE)
         anim = @animate for i = 1:T
             animate_frame(i)
@@ -152,19 +153,20 @@ elseif(RUN_PLOTS)
         end
     end
 
+    # make plot
     for i = 1:T
         animate_frame(i)
     end
-
     if(RUN_CM)
         savefig("Saved_plots/cm_plot.png")
     elseif(RUN_SSA)
         savefig("Saved_plots/ssa_plot.png")
     end
 
-    # # violation rates plot
-    # plot(ssa_data, label = "State Selection Algorithm",shape=:utriangle)
-    # plot!(cm_data, label = "Conditional Mean",shape =:utriangle)
+    plot(ssa_data, label = "State Selection Algorithm", shape =:utriangle, ms = 5)
+    plot!(cm_data, label = "Conditional Mean", shape =:circle, ms = 4)
+    savefig("Saved_plots/violation_rates.png")
+
 end
 
 

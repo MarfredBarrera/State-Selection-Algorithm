@@ -48,33 +48,6 @@ function launch_xprime_kernel!(state, T, w, u)
     end
 end
 
-
-## function: launch_xk2prime_kernel! - compute M number x'' sequences for one particle
-# inputs: T - time steps, M - sample number, state - initial state density, i - iterator through L
-#  u - input, w2 - randomly generated noise
-#
-# output: updated state array 
-function launch_xk2prime_kernel!(SSA_params, Ξ, state, u, w2, i)
-
-    L = SSA_params.L
-    M = SSA_params.M 
-    N = SSA_params.N
-
-    # for each particle in the state density, randomly sample M particles
-    local mc_sample_index = (rand(1:L, M))
-    state[:,:,1] = Ξ[:,mc_sample_index]
-
-    # calculate M sampled trajectories
-    kernel = @cuda launch=false monte_carlo_sampling_kernel!(N, M, Ξ, state, u, w2, i)
-    config = launch_configuration(kernel.fun)
-    threads = min(length(state), config.threads)
-    blocks = cld(length(state), threads)
-
-    CUDA.@sync begin
-        kernel(N, M, Ξ, state, u, w2, i; threads, blocks)
-    end
-end
-
 # function: launch_constraint_kernel!
 # objective: launch kernel for violation rate calculation
 function launch_constraint_kernel!(SSA_limits,T,M,state,u, state_violation_count, i)
@@ -88,6 +61,21 @@ function launch_constraint_kernel!(SSA_limits,T,M,state,u, state_violation_count
     end
 end
 
+# function: xk2prime
+# input:
+# - N: time horizon
+# - M: Monte Carlo sample number 
+# - u: array of control sequences [1 X L]
+# - w: array of random noise [2 x M x N]
+# - xk2prime: batch of Monte Carlo sampled trajectories
+function xk2prime!(N, M, u, w, xk2prime, i)
+    for j = 1:M
+        for t = 1:N-1
+            xk2prime[:,j,t+1] = dynamics.f(xk2prime[:,j,t],u[i,t],w[:,j,t])
+        end
+    end
+end
+
 # function: state_selection_algorithm
 # inputs:
 # - Ξ: particle density
@@ -95,6 +83,10 @@ end
 # - SSA_limits: struct of state and input constraints
 function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     n = SSA_params.n
+    L = SSA_params.L
+    N = SSA_params.N
+    M = SSA_params.M
+
     # intialize state array
     state = CUDA.fill(1.0f0, (n,L,N))
     # fill state array with intial particle density
@@ -106,7 +98,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     # generate random noise sequence Wprime for time horizon N for 
     # state density with num particles L
     w = (gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
-    w2 = ((gpu_sample_gaussian_distribution(0, ω, (n,L,N))))
+    w2 = Array((gpu_sample_gaussian_distribution(0, ω, (n,L,N))))
 
     # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
     CUDA.@sync launch_xprime_kernel!(state, N, w, u)
@@ -127,13 +119,16 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     for i = 1:L
         
         # calculate x'' trajectories
-        CUDA.@sync launch_xk2prime_kernel!(SSA_params, Ξ, state_2prime, u, w2, i)
+        # CUDA.@sync launch_xk2prime_kernel!(SSA_params, Ξ, state_2prime, u, w2, i)
+        mc_sample_index = (rand(1:L, M))
+        state_2prime[:,:,1] = Ξ[:,mc_sample_index]
+        xk2prime!(N, M, Array(u), w2, Array(state_2prime), i)
 
         # calculate cost and state/control violation rates
-        CUDA.@sync launch_constraint_kernel!(SSA_limits, N, M ,state_2prime, u, state_violation_count, i)
+        CUDA.@sync launch_constraint_kernel!(SSA_limits, N, M , state_2prime, u, state_violation_count, i)
 
         # sum the sampled cost to calculate the cost of each L particles
-        cost[i] = sum(xk2prime.^2)+sum(state[:,i,:].^2)
+        cost[i] = M*sum(state[:,i,:].^2) + sum(state_2prime.^2)
 
         # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
         sampled_state_violations[i,:] = sum(state_violation_count, dims=1)
@@ -143,7 +138,6 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
         # total_control_violations[i] = all(sampled_control_violations[i,:]/M .< α)
     end
 
-
     # mask for feasible states
     feasibility_mask = total_state_violations
 
@@ -151,7 +145,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
 
     
     if(sum(feasibility_mask)==0) # if there are no feasible states, the feasible set is empty and SSA cannot proceed
-        println("Feasible set is empty!")
+        error("Feasible set is empty!")
         cost_val,candidate_index = findmin(cost)
         return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
     else # otherwise, find feasible state with minimum cost
@@ -205,7 +199,7 @@ function run_simulation(T)
 
         # check how many particles violate state constraints
         violation_rate[t] = sum(check_constraints(pf.particles))/L
-        println(violation_rate[t])
+        println("Violation Rate: ", violation_rate[t])
 
         # controller based on selected_state
         u_star = dynamics.u(candidate_state)
@@ -240,9 +234,7 @@ end
 # input: x - 2D row vector of state particles
 # output: 1 x length(x) vector of 1s and 0s, 1 being a state violation
 function check_constraints(x)
-
     constraint_count = fill(0.0f0,size(x,2))
-
     for i = eachindex(constraint_count)
         in_region1 = (x1_lowerlim < x[1,i] < x1_upperlim) && (y1_lowerlim < x[2,i] < y1_upperlim)
         in_region2 = (x2_lowerlim < x[1,i] < x2_upperlim) && (y2_lowerlim < x[2,i] < y2_upperlim)
@@ -251,6 +243,5 @@ function check_constraints(x)
             constraint_count[i] = 1
         end
     end
-
     return constraint_count
 end

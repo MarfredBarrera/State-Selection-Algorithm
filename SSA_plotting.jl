@@ -1,8 +1,6 @@
-
+using Plots
 MARKER_SIZE = 1.5
-state_constraints = [
-    rectangle_from_coords(x1_lowerlim,y1_lowerlim,x1_upperlim,y1_upperlim)
-    rectangle_from_coords(x2_lowerlim,y2_lowerlim,x2_upperlim,y2_upperlim)]
+
 
 
 function rectangle_from_coords(xb,yb,xt,yt)

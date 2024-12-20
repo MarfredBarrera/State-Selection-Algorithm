@@ -11,11 +11,8 @@ function xprime_kernel_function!(state, T, w, u)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
         
-
     for i = index:stride:size(u,1)
-
         @inbounds u[i,1] = -0.05*state[1,i,1]*state[2,i,1]
-
         for t ∈ 2:T
             @inbounds begin
                 u[i,t] = -0.05*state[1,i,t]*state[2,i,t]
@@ -24,8 +21,6 @@ function xprime_kernel_function!(state, T, w, u)
             end
         end
     end
-         
-
     return
 end
 
@@ -34,14 +29,15 @@ end
 #  u - input, w2 - randomly generated noise
 #
 # output: updated state array 
-function monte_carlo_sampling_kernel!(T, M, Ξ, state, u, w2, i)
+function monte_carlo_sampling_kernel!(N, M, state, u, w2, i)
     index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
     stride = gridDim().x * blockDim().x
-
-    for t ∈ 1:T-1
-        for j = index:stride:M
-            @inbounds state[1,j,t+1] = 0.9*state[1,j,t] + 0.2*state[2,j,t] + w2[1,j,t]
-            @inbounds state[2,j,t+1] = -0.15*state[1,j,t] + 0.9*state[2,j,t] + 0.05*state[1,j,t]*state[2,j,t] + u[i,t] + w2[2,j,t]
+    for j = index:stride:M
+        for t ∈ 1:N-1
+            @inbounds begin 
+             state[1,j,t+1] = 0.9*state[1,j,t] + 0.2*state[2,j,t] + w2[1,j,t]
+             state[2,j,t+1] = -0.15*state[1,j,t] + 0.9*state[2,j,t] + 0.05*state[1,j,t]*state[2,j,t] + u[i,t] + w2[2,j,t]
+            end
         end
     end
 end  

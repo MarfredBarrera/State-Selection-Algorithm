@@ -98,7 +98,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     # generate random noise sequence Wprime for time horizon N for 
     # state density with num particles L
     w = (gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
-    w2 = Array((gpu_sample_gaussian_distribution(0, ω, (n,L,N))))
+    w2 = Array(gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
 
     # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
     CUDA.@sync launch_xprime_kernel!(state, N, w, u)
@@ -117,25 +117,27 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     Ξ = CuArray(Ξ)
     # iterate through each particle in Ξ and run M monte carlo simulations for each particle 
     for i = 1:L
-        
-        # calculate x'' trajectories
-        # CUDA.@sync launch_xk2prime_kernel!(SSA_params, Ξ, state_2prime, u, w2, i)
-        mc_sample_index = (rand(1:L, M))
-        state_2prime[:,:,1] = Ξ[:,mc_sample_index]
-        xk2prime!(N, M, Array(u), w2, Array(state_2prime), i)
+        CUDA.@sync begin
+            # calculate x'' trajectories
 
-        # calculate cost and state/control violation rates
-        CUDA.@sync launch_constraint_kernel!(SSA_limits, N, M , state_2prime, u, state_violation_count, i)
+            mc_sample_index = (rand(1:L, M))
+            state_2prime[:,:,1] = Ξ[:,mc_sample_index]
+            xk2prime!(N, M, Array(u), w2, Array(state_2prime), i)
+            # launch_xk2prime_kernel!(SSA_params, state_2prime, u, w2, i)
 
-        # sum the sampled cost to calculate the cost of each L particles
-        cost[i] = M*sum(state[:,i,:].^2) + sum(state_2prime.^2)
+            # calculate cost and state/control violation rates
+            launch_constraint_kernel!(SSA_limits, N, M , state_2prime, u, state_violation_count, i)
 
-        # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
-        sampled_state_violations[i,:] = sum(state_violation_count, dims=1)
+            # sum the sampled cost to calculate the cost of each L particles
+            cost[i] = M*sum(state[:,i,:].^2) + sum(state_2prime.^2)
 
-        # indicate which particles satisfy state constraints
-        total_state_violations[i] = all(sampled_state_violations[i,:]/M .< α)
-        # total_control_violations[i] = all(sampled_control_violations[i,:]/M .< α)
+            # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
+            sampled_state_violations[i,:] = sum(state_violation_count, dims=1)
+
+            # indicate which particles satisfy state constraints
+            total_state_violations[i] = all(sampled_state_violations[i,:]/M .< α)
+            # total_control_violations[i] = all(sampled_control_violations[i,:]/M .< α)
+        end
     end
 
     # mask for feasible states
@@ -145,7 +147,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
 
     
     if(sum(feasibility_mask)==0) # if there are no feasible states, the feasible set is empty and SSA cannot proceed
-        error("Feasible set is empty!")
+        println("Feasible set is empty!")
         cost_val,candidate_index = findmin(cost)
         return Array(Ξ)[:,candidate_index], u[candidate_index,1], candidate_index, feasibility_mask
     else # otherwise, find feasible state with minimum cost

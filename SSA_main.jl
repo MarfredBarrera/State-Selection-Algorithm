@@ -49,7 +49,7 @@ RUN_SSA ? RUN_CM = false : RUN_CM = true
 
 
 COMPUTE_SIM_DATA ? RUN_PLOTS = false : RUN_PLOTS = true
-ANIMATE = false
+ANIMATE = true
 
 Ulim = 3
 α = 0.10
@@ -62,7 +62,7 @@ M = 300
 # intialize parameters
 N = 6
 n = 2
-T = 20
+T = 30
 
 # state density mean and variance
 μ = [7.75;-7.75]

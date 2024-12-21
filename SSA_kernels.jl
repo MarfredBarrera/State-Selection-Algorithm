@@ -24,24 +24,6 @@ function xprime_kernel_function!(state, T, w, u)
     return
 end
 
-## function: monte_carlo_sampling_kernel - kernel function that calculates M samples for one particle
-# inputs: T - time steps, M - sample number, state - initial state density, i - iterator through L
-#  u - input, w2 - randomly generated noise
-#
-# output: updated state array 
-function monte_carlo_sampling_kernel!(N, M, state, u, w2, i)
-    index = (blockIdx().x - 1) * blockDim().x + threadIdx().x
-    stride = gridDim().x * blockDim().x
-    for j = index:stride:M
-        for t ∈ 1:N-1
-            @inbounds begin 
-             state[1,j,t+1] = 0.9*state[1,j,t] + 0.2*state[2,j,t] + w2[1,j,t]
-             state[2,j,t+1] = -0.15*state[1,j,t] + 0.9*state[2,j,t] + 0.05*state[1,j,t]*state[2,j,t] + u[i,t] + w2[2,j,t]
-            end
-        end
-    end
-end  
-
 
 # function: master_kernel!
 # inputs: 
@@ -108,6 +90,7 @@ function constraint_violation_kernel!(SSA_limits,T,M,state,u, state_violation_co
             end
         end
     end
+
 
     return 
 end

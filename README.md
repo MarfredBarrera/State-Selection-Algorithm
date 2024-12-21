@@ -23,7 +23,7 @@ $l_k = x_k^Tx_k + u_k^2$
 
 ### Constraint Set:
 
-$L = [3,5] \times[-4,2]\\  \cup \\ [-2,5] \times [-7,-4]$
+$L = [3,5] \times[-4,2]\:\:  \cup \:\: [-2,5] \times [-7,-4]$
 
 ## SSA Plot
 ![](/Saved_plots/ssa_gif_example.gif)
@@ -32,7 +32,7 @@ $L = [3,5] \times[-4,2]\\  \cup \\ [-2,5] \times [-7,-4]$
 ![](/Saved_plots/cm_example.gif)
 
 ## Violation Rates
-![](/Saved_plots/violation_rates_example.png)
+![](/Saved_plots/violation_rates.png)
 
 In the case of these dynamics, the minimum cost trajectories that do not violate the state constraints push the density away from the origin. Eventually, the particles must stabilize near the origin. This behavior is evident in the differences in propagation between the SSA and Conditional Mean particle filters.
 

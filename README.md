@@ -23,7 +23,7 @@ $l_k = x_k^Tx_k + u_k^2$
 
 ### Constraint Set:
 
-$L = [3,5] \times[-4,2]\:\:  \cup \:\: [-2,5] \times [-7,-4]$
+$L = [3,5] \times[-4,2]\\  \cup \\ [-2,5] \times [-7,-4]$
 
 ## SSA Plot
 ![](/Saved_plots/ssa_gif_example.gif)

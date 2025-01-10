@@ -61,6 +61,19 @@ function launch_constraint_kernel!(SSA_limits,T,M,state,u, state_violation_count
     end
 end
 
+
+function xkprime!(SSA_params, u, w, xkprime, dynamics)
+    L = SSA_params.L
+    N = SSA_params.N
+    for i = 1:L
+        for t = 1:N-1
+            u[i,t] = dynamics.u(xkprime[:,i,t])
+            xkprime[:,i,t+1] = dynamics.f(xkprime[:,i,t], u[i,t], w[:,i,t])
+        end
+    end
+end
+
+
 # function: xk2prime
 # input:
 # - N: time horizon
@@ -88,20 +101,25 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     M = SSA_params.M
 
     # intialize state array
-    state = CUDA.fill(1.0f0, (n,L,N))
+    # state = CUDA.fill(1.0f0, (n,L,N))
+    state = fill(1.0f0, (n,L,N))
+
     # fill state array with intial particle density
     state[:,:,1] = Ξ
 
     # initalize input array
-    u = CUDA.fill(0.0f0, L,N)
+    # u = CUDA.fill(0.0f0, L,N)
+    u = fill(0.0f0, L,N)
 
     # generate random noise sequence Wprime for time horizon N for 
     # state density with num particles L
-    w = (gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
+    # w = (gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
+    w = Array(gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
     w2 = Array(gpu_sample_gaussian_distribution(0, ω, (n,L,N)))
 
     # ### First, lets generate the x' trajectories for time horizon N for each particle in state density Xi ###
-    CUDA.@sync launch_xprime_kernel!(state, N, w, u)
+    # CUDA.@sync launch_xprime_kernel!(state, N, w, u)
+    xkprime!(SSA_params,u,w,state,dynamics)
 
     # declare vectors for x'' trajectories, cost, and constraint violation rate calculations
     cost = fill(0.0f0, L)
@@ -126,7 +144,7 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
             # launch_xk2prime_kernel!(SSA_params, state_2prime, u, w2, i)
 
             # calculate cost and state/control violation rates
-            launch_constraint_kernel!(SSA_limits, N, M , state_2prime, u, state_violation_count, i)
+            launch_constraint_kernel!(SSA_limits, N, M , state_2prime, CuArray(u), state_violation_count, i)
 
             # sum the sampled cost to calculate the cost of each L particles
             cost[i] = M*sum(state[:,i,:].^2) + sum(state_2prime.^2)

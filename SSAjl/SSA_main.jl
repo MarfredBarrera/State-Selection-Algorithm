@@ -40,7 +40,7 @@ end
 
 ## Choose:
 # 1) Either State Selection Algorithm OR Conditional Mean Selection
-RUN_SSA = false
+RUN_SSA = true
 # 2) Either compute simulation data OR plot simulation data
 COMPUTE_SIM_DATA = false
 
@@ -49,7 +49,7 @@ RUN_SSA ? RUN_CM = false : RUN_CM = true
 
 
 COMPUTE_SIM_DATA ? RUN_PLOTS = false : RUN_PLOTS = true
-ANIMATE = true
+ANIMATE = false
 
 Ulim = 3
 α = 0.10
@@ -62,7 +62,7 @@ M = 300
 # intialize parameters
 N = 6
 n = 2
-T = 30
+T = 20
 
 # state density mean and variance
 μ = [7.75;-7.75]

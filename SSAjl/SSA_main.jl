@@ -42,7 +42,7 @@ end
 # 1) Either State Selection Algorithm OR Conditional Mean Selection
 RUN_SSA = true
 # 2) Either compute simulation data OR plot simulation data
-COMPUTE_SIM_DATA = false
+COMPUTE_SIM_DATA = true
 
 # simulation parameters
 RUN_SSA ? RUN_CM = false : RUN_CM = true
@@ -165,7 +165,7 @@ elseif(RUN_PLOTS)
 
     plot(ssa_data, label = "State Selection Algorithm", shape =:utriangle, ms = 5)
     plot!(cm_data, label = "Conditional Mean", shape =:circle, ms = 4)
-    savefig("Saved_plots/violation_rates.png")
+    savefig("violation_rates.png")
 
 end
 

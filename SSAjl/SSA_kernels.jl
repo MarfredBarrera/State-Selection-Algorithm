@@ -94,3 +94,33 @@ function constraint_violation_kernel!(SSA_limits,T,M,state,u, state_violation_co
 
     return 
 end
+
+# function: constraint_violation_kernel!
+# objective: calculate constraint violation rates
+function constraint_violation_check!(SSA_limits,T,M,state,u, state_violation_count, i)
+    # unpack SSA_limits struct
+    Ulim = SSA_limits.Ulim
+    x1_upperlim = SSA_limits.x1_upperlim
+    x1_lowerlim = SSA_limits.x1_lowerlim
+    y1_upperlim = SSA_limits.y1_upperlim
+    y1_lowerlim = SSA_limits.y1_lowerlim
+    x2_upperlim = SSA_limits.x2_upperlim
+    x2_lowerlim = SSA_limits.x2_lowerlim
+    y2_upperlim = SSA_limits.y2_upperlim
+    y2_lowerlim = SSA_limits.y2_lowerlim
+
+    # compare each trajectory with state constraints
+    for j = 1:M
+        for t = 1:T
+
+            in_region1 = (x1_lowerlim < state[1,j,t] < x1_upperlim) && (y1_lowerlim < state[2,j,t] < y1_upperlim)
+            in_region2 = (x2_lowerlim < state[1,j,t] < x2_upperlim) && (y2_lowerlim < state[2,j,t] < y2_upperlim)
+
+            if(in_region1||in_region2)
+                state_violation_count[j,t] = 1
+            end
+        end
+    end
+
+    return 
+end

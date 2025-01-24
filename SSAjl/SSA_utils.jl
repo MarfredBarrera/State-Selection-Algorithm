@@ -89,6 +89,10 @@ function xk2prime!(N, M, u, w, xk2prime, i)
     end
 end
 
+function J(x,u)
+    return x'*x + u'*u
+end
+
 # function: state_selection_algorithm
 # inputs:
 # - Ξ: particle density
@@ -124,15 +128,15 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
     # declare vectors for x'' trajectories, cost, and constraint violation rate calculations
     cost = fill(0.0f0, L)
     sampled_costs = CUDA.fill(0.0f0, M,N)
-    state_violation_count = CUDA.fill(0.0f0, M,N)
-    sampled_state_violations = CUDA.fill(0.0f0,L,N)
-    sampled_control_violations = CUDA.fill(0.0f0,L,N)
+    state_violation_count = fill(0.0f0, M,N)
+    sampled_state_violations = fill(0.0f0,L,N)
+    sampled_control_violations = fill(0.0f0,L,N)
     total_state_violations = fill(false,L)
     total_control_violations = fill(false,L)
-    state_2prime = CUDA.fill(0.0f0, (n,M,N))
+    state_2prime = fill(0.0f0, (n,M,N))
 
 
-    Ξ = CuArray(Ξ)
+    # Ξ = CuArray(Ξ)
     # iterate through each particle in Ξ and run M monte carlo simulations for each particle 
     for i = 1:L
         CUDA.@sync begin
@@ -144,10 +148,16 @@ function state_selection_algorithm(Ξ,SSA_params,SSA_limits)
             # launch_xk2prime_kernel!(SSA_params, state_2prime, u, w2, i)
 
             # calculate cost and state/control violation rates
-            launch_constraint_kernel!(SSA_limits, N, M , state_2prime, CuArray(u), state_violation_count, i)
+            # launch_constraint_kernel!(SSA_limits, N, M , state_2prime, CuArray(u), state_violation_count, i)
+            constraint_violation_check!(SSA_limits,N,M,state_2prime,u, state_violation_count, i)
 
             # sum the sampled cost to calculate the cost of each L particles
-            cost[i] = M*sum(state[:,i,:].^2) + sum(state_2prime.^2)
+            for j = 1:M
+                for t = 1:N
+                    cost[i] += (J((state_2prime[:,j,t]), 0) + J(state[:,i,t],0))
+                end
+            end
+            # cost[i] = sum(state_2prime.^2) + M*sum(state[:,i,:].^2)
 
             # sum the violation counts to make an [L x N] array, which contains the total violations of each trajectory
             sampled_state_violations[i,:] = sum(state_violation_count, dims=1)

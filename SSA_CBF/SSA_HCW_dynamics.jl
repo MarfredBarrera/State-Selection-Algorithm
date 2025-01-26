@@ -7,6 +7,8 @@ Base.@kwdef mutable struct Dynamics
     fd::Function
     gd::Function
     kd::Function
+    A::Matrix{Float64}
+    B::Matrix{Float64}
     Q::Matrix{Float64}
     R::Float64
     n::Int64
@@ -15,19 +17,19 @@ end
 
 ## DEFINE HCW DYNAMICS PARAMETERS ##
 η = 0.0011  
-# A =  [0 0 1 0;
-#       0 0 0 1;
-#       3*η^2 0 0 2*η;
-#       0 0 -2*η 0]
-A =  [0.0 0.0;
-      0.0 0.0]
+A =  [0 0 1 0;
+      0 0 0 1;
+      3*η^2 0 0 2*η;
+      0 0 -2*η 0]
+# A =  [0.0 0.0;
+#       0.0 0.0]
 
-# B =  [0.0 0.0;
-#       0.0 0.0;
-#       1.0 0.0;
-#       0.0 1.0]
-B =  [1.0 0.0; 
-      0.0 1.0] 
+B =  [0.0 0.0;
+      0.0 0.0;
+      1.0 0.0;
+      0.0 1.0]
+# B =  [1.0 0.0; 
+#       0.0 1.0] 
 
 # Compute discrete-time A_d and B_d
 #  Time step for discretization
@@ -38,22 +40,22 @@ Bd = Δt * Ad * B  # Euler approximation of integral equation for Bd
 # Gain matrices for nominal feedback controller
 Kp = [1.2 0.0; 
       0.0 1.2]
-Kd = [1.5 0.0; 
-      0.0 1.5]
+Kd = [1.75 0.0; 
+      0.0 1.75]
 
 
-# Additive Gaussian noise matrix
+# Noise matrix
 # Q =  [0.0 0.0 0.0 0.0;
 #       0.0 0.0 0.0 0.0;
 #       0.0 0.0 0.0 0.0;
 #       0.0 0.0 0.0 0.0;]
-Q =  [0.01 0.0;
-      0.0 0.01;]
+Q =  [2.0 0.0;
+      0.0 2.0;]
 
 R = 0.0
 
 
-n = 2 # state dimension
+n = 4 # state dimension
 m = 2 # control dimension
 
 ## Define control affine system; dx = Ax + Bu
@@ -65,7 +67,7 @@ fd(x::Vector{Float64}) = Ad*x
 gd(x::Vector{Float64}) = Bd
 
 ## propagate through discrete time dynamics
-dynamics(Σ::Dynamics,x,u) = Σ.fd(x) + Σ.gd(x)*u + Σ.Q*randn(Σ.n)
+dynamics(Σ::Dynamics,x,u) = Σ.fd(x) + Σ.gd(x)*(u + Σ.Q*randn(Σ.m))
 
 ## define HCW dynamics
 # HCW = Dynamics(f,g,fd,gd,kd,Q,R,n,m)

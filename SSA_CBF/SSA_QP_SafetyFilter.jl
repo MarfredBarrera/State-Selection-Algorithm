@@ -30,34 +30,17 @@ end
 solver for CBF_QP quadratic program safety filter given a CBF and nominal controller
 """
 function solve_cbf_qp(x, Σ::Dynamics, cbf::ControlBarrierFunction, kd::Function)
-    # λ = 0.0
-    # u_nom = kd(x)
-    # model = Model(OSQP.Optimizer)
-    # set_silent(model)
-    # u = Σ.m == 1 ? @variable(model, u) : @variable(model, u[1:(Σ.m)])
-    # @variable(model,s)
-
-    # @objective(model, Min, sum((u[i]-u_nom[i])^2 for i in 1:Σ.m) + λ*s^2)
-    # @constraint(model, cbf.Lfh(x) + cbf.Lgh(x)*u + λ*s >= -cbf.α(cbf(x)))
-
-    # optimize!(model)
-
-    # return Σ.m == 1 ? value(u) : value.(u)
-
-    λ = 0.5
+    λ = 0.1
     c1 = 2.0
     c2 = 1.0
     u_nom = kd(x)
-    A = cbf.∇h(x)'*Σ.A*Σ.B + c1*cbf.∇h(x)'*Σ.g(x)
-    b = -(cbf.∇h(x)'*Σ.A*(Σ.f(x)) + c1*cbf.∇h(x)'*Σ.f(x) + c2*cbf.h(x))
-
     model = Model(OSQP.Optimizer)
     set_silent(model)
     u = Σ.m == 1 ? @variable(model, u) : @variable(model, u[1:(Σ.m)])
     @variable(model,s)
 
     @objective(model, Min, sum((u[i]-u_nom[i])^2 for i in 1:Σ.m) + λ*s^2)
-    @constraint(model, A*u + λ*s >= b)
+    @constraint(model, (cbf.∇h(x)'*Σ.A*Σ.B + c1*cbf.∇h(x)'*Σ.g(x))*u + λ*s >= -(cbf.∇h(x)'*Σ.A*(Σ.f(x)) + c1*cbf.∇h(x)'*Σ.f(x) + c2*cbf.h(x)))
 
     optimize!(model)
 

@@ -9,9 +9,6 @@ function circleShape(h,k,r)
 end
 
 
-
-
-
 anim = @animate for t = 1:K-1
      plot(state[1,t,:], state[2,t,:],
           seriestype=:scatter, 

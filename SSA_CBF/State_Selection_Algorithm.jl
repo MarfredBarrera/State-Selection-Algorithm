@@ -22,31 +22,37 @@ function state_selection_algorithm(SSA_params, Ξ, kd::Function, Σ::Dynamics, J
     N = SSA_params.N
     M = SSA_params.M
     L = SSA_params.L
+    α = 0.20
 
 
     state = Array{Float64}(undef, (n,N,L))
     u_total = Array{Float64}(undef, (m,N,L))
     state_2prime = Array{Float64}(undef,(n,N,M))
     cost = Array{Float64}(undef, L)
-    sampled_state_violation_count = zeros(M)
-    total_state_violations = Array{Float64}(undef, L)
-
-
-    state[:,1,:] = Ξ
+    total_state_violations = zeros(L)
+    sampled_state_violation_count = zeros(L)
+    feasibility_mask = falses(L)
     
 
+    state[:,1,:] = Ξ
     xprime!(u_total, SSA_params, state, Σ, kd)
 
     Threads.@threads for i = 1:L
+
+        if(check_constraints(state[:,1,i]) > 0)
+            total_state_violations[i] = Inf
+            continue
+        end
+
         mc_sample_index = (rand(1:L, M))
-        state_2prime[:,1,:] .= Ξ[:,mc_sample_index]
+        state_2prime[:,1,:] = Ξ[:,mc_sample_index]
 
         u_j = u_total[:,:,i]
         x2prime!(u_j, SSA_params, state_2prime, Σ, kd)
 
         for j = 1:M
             for t = 1:N
-                cost[i] += J(state_2prime[:,t,j], u_j[:,t]) + J(state[:,t,i], u_j[:,t])
+                cost[i] += J(state_2prime[:,t,j], u_j[:,t]) + J(state[:,t,i],u_j[:,t])
                 # if(check_constraints(state_2prime[:,t,j]) == 1)
                 #     sampled_state_violation_count[j] = 1.0
                 # end
@@ -55,17 +61,17 @@ function state_selection_algorithm(SSA_params, Ξ, kd::Function, Σ::Dynamics, J
         # total_state_violations[i] = sum(sampled_state_violation_count)/M
     end
 
-    # if(sum(feasibility_mask) <= 0)
-    #     println("Feasible set is empty!")
-    #     cost_val, candidate_index = findmin(cost)
-    #     return Ξ[:,candidate_index]
-    # else
-    #     cost_val, candidate_index = findmin(cost[feasibility_mask])
-    #     return Ξ[:,candidate_index]
-    # end
+    feasibility_mask = total_state_violations .< α
 
-    cost_val, candidate_index = findmin(cost)
-    return Ξ[:,candidate_index]
+
+    if(sum(feasibility_mask) <= 0)
+        println("Feasible set is empty!")
+        cost_val, candidate_index = findmin(cost)
+        return Ξ[:,candidate_index]
+    else
+        cost_val, candidate_index = findmin(cost[feasibility_mask])
+        return Ξ[:,candidate_index]
+    end
 end
 
 check_constraints(x) = h(x) > 0 ? 0 : 1

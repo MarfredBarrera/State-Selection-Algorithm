@@ -18,10 +18,14 @@ end
 
 ## DEFINE HCW DYNAMICS  ##
 η = 0.0011  
+# A =  [0 0 1 0;
+#       0 0 0 1;
+#       3*η^2 0 0 2*η;
+#       0 0 -2*η 0]
 A =  [0 0 1 0;
       0 0 0 1;
-      3*η^2 0 0 2*η;
-      0 0 -2*η 0]
+      0 0 0 0;
+      0 0 0 0]
 B =  [0.0 0.0;
       0.0 0.0;
       1.0 0.0;
@@ -31,7 +35,7 @@ C =  [1.0 0.0 0.0 0.0;
 
 # Compute discrete-time A_d and B_d
 #  Time step for discretization
-Δt = 0.1  
+Δt = 0.1
 Ad = exp(Δt * A)  # Exponential of matrix A
 Bd = Δt * Ad * B  # Euler approximation of integral equation for Bd
 
@@ -43,8 +47,8 @@ Kd = [1.75 0.0;
 
 
 # Noise matrix
-Q =  [0.25 0.0;
-      0.0 0.25;]
+Q =  [0.15 0.0;
+      0.0 0.15;]
 R =  [0.15 0.0;
       0.0 0.15]
 

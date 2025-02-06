@@ -93,6 +93,8 @@ function state_selection_algorithm(SSA_params, Ξ, kd::Function, Σ::Dynamics, J
         for j = 1:M
             for t = 1:N
                 cost[i] += J(state_2prime[:,t,j], u_j[:,t]) + J(state[:,t,i], u_j[:,t])
+
+                
                 if(check_constraints(state_2prime[:,t,j]) == 1)
                     sampled_state_violation_count[t,j] = 1.0
                 end

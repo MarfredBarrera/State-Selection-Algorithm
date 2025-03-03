@@ -23,7 +23,7 @@ function time_update(PF::ParticleFilter, u::Vector{Float64})
     Threads.@threads for i = axes(particles_plus,2)
         particles_plus[:,i] = PF.f(PF.particles[:,i], u)
     end
-    return particles_plus
+    PF.particles = particles_plus
 end
 
 function measurement_update(PF::ParticleFilter, y::Vector{Float64})
@@ -31,7 +31,7 @@ function measurement_update(PF::ParticleFilter, y::Vector{Float64})
     V_inv = inv(PF.V)
     Threads.@threads for i = axes(PF.particles,2)
         err = y - PF.h(PF.particles[:,i])
-        measurement_likelihoods[i] = exp.(-1/2 * err' * V_inv *err)
+        measurement_likelihoods[i] = exp.((-1/2) * err' * V_inv *err)
     end
     # We assume resampling is done every time step, so no need to multiply with old likelihoods
     new_likelihoods = PF.likelihoods .* measurement_likelihoods # p(x) * p(y|x)
@@ -45,6 +45,7 @@ function resampler!(PF::ParticleFilter)
         particles_resampled[:,i] = PF.particles[:,findfirst(CDF .>= rand(1))]
     end
     PF.particles = particles_resampled
+    PF.likelihoods = Vector(fill(1,(L)))
 end
 
 function propagate_PF!(PF::ParticleFilter, u::Vector{Float64}, y::Vector{Float64})

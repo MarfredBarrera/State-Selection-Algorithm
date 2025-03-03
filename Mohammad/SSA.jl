@@ -39,7 +39,7 @@ function SSA_select(SSA::SSA, x_prime_0, α_t_achieved, cost_t_achieved)
     L = size(SSA.PF.particles, 2)
     feasible_indices = falses(L)
     cost_achieved = zeros(L)
-    for i = 1:L
+    Threads.@threads for i = 1:L
         # Check feasibility
         if all(α_t_achieved[i,:] .<= SSA.α)
             feasible_indices[i] = true

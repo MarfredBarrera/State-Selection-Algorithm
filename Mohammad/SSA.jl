@@ -14,7 +14,7 @@ function SSA_sample_averages(SSA::SSA)
     X_prime = Array{Float64}(undef, (n, SSA.N, L))
     α_t_achieved = Array{Float64}(undef, (L, SSA.N))
     cost_t_achieved = Array{Float64}(undef, (L, SSA.N))
-    for i = 1:L
+    Threads.@threads for i = 1:L
         X_prime[:,1,i] = SSA.PF.particles[:,i]
         x_dprime_per_sample = SSA.PF.particles[:,rand(1:L, SSA.M)]
          for t = 1:SSA.N-1
@@ -54,7 +54,7 @@ function SSA_select(SSA::SSA, x_prime_0, α_t_achieved, cost_t_achieved)
         println("No feasible state found!")
         α_achieved_sum = sum(α_t_achieved, dims=2)
         min_α, min_index = findmin(α_achieved_sum)
-        return x_prime_0[:,min_index[0]]
+        return x_prime_0[:,min_index[1]]
     else
         min_cost, min_index = findmin(cost_achieved[feasible_indices])
         return x_prime_0[:, feasible_indices_set[min_index]]

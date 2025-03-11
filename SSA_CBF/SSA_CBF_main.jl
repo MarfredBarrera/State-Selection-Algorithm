@@ -51,7 +51,7 @@ kd(x) = -Kp*(x[1:2]-r_goal)-Kd*x[3:4]
 
 # initialize state and control arrays
 state = Array{Float64}(undef, (n,K,L))
-μ = [3.5, 3.5, 0.0, 0.0]
+μ = [3.0, 3.0, 0.0, 0.0]
 x0 = Array(gpu_generate_Xi(L,n,μ,w))
 x0_true = μ + [w*randn(),w*randn(),0.0,0.0]
 state[:,1,:] .= x0
@@ -59,7 +59,7 @@ state[:,1,:] .= x0
 ## Define a control barrier function
 # x: relative position, [rx, ry]
 dmin = 1.25
-r0 = [1.6, 1.45]
+r0 = [1.75, 1.45]
 h(x) = norm(x[1:2]-r0)^2 - dmin^2
 α(r) = 1.0*r
 cbf = ControlBarrierFunction(h, Σ, α)

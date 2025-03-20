@@ -3,11 +3,11 @@ using LinearAlgebra, Revise, ControlSystemsBase, Plots, Statistics
 using JuMP, OSQP
 using ForwardDiff, DifferentialEquations
 
-include("Mohammad/ParticleFilter.jl")
-include("Mohammad/SSA.jl")
-include("Mohammad/ControlAffineDynamics.jl")
-include("Mohammad/ControlBarrierFunction.jl")
-include("Mohammad/QPSafetyFilter.jl")
+include("SSA_CBFv2/ParticleFilter.jl")
+include("SSA_CBFv2/SSA.jl")
+include("SSA_CBFv2/ControlAffineDynamics.jl")
+include("SSA_CBFv2/ControlBarrierFunction.jl")
+include("SSA_CBFv2/QPSafetyFilter.jl")
 
 # Define state-space example
 A =  [0 0 1 0;
@@ -45,21 +45,23 @@ V = Diagonal([0.15, 0.15])
 
 # state transition
 f(x::Vector{Float64}, u::Vector{Float64}) = Ad * x + Bd * u + sqrt(W) * randn(size(W,1))
+# f(x::Vector{Float64}, u::Vector{Float64}) = Ad * x + Bd * u
 # measurement
 h(x::Vector{Float64}) = C * x + sqrt(V) * randn(size(V,1))
+# h(x::Vector{Float64}) = C * x
 
 sys = ss(Ad,Bd,C,0,Δt)
 
 Q = I
 R = 2*I
 
-# K_LQR = -lqr(sys, Q, R)
+K_LQR = -lqr(sys, Q, R)
 # println("LQR control gain ", K_LQR)
-# controller(x::Vector{Float64}) = K_LQR * x
+controller(x::Vector{Float64}) = K_LQR * x
 
 # Construct a control barrier function
 dmin = 1.25
-r0 = [1.75, 1.45]
+r0 = [1.85, 1.55]
 h_cbf(x) = norm(x[1:2]-r0)^2 - dmin^2
 kappa(r) = 1.0*r
 cbf = ControlBarrierFunction(h_cbf, Σ, kappa)
@@ -68,9 +70,9 @@ cbf = ControlBarrierFunction(h_cbf, Σ, kappa)
 k_cbf = QPSafetyFilter(cbf, Σ, kd)
 
 # Define initial state density
-L = 400
+L = 300
 var0 = Diagonal([0.15, 0.15, 0, 0])
-μ0 = [2.65; 2.95; 0.0; 0.0;]
+μ0 = [2.65; 3.00; 0.0; 0.0;]
 initial_particles = μ0 .+ sqrt(var0) * randn(size(W,1), L)
 
 # Define particle filter
@@ -89,8 +91,9 @@ function simulate_SSA(x_true0, T, ssa, RUN_SSA)
       X_star_queue = []
       particle_queue = []
       violation_queue = []
+      cost_queue = []
       for t = 1:T
-            print("Time step: ", t)
+
 
             if(RUN_SSA)
                   x_prime0, α_t_achieved, cost_t_achieved = SSA_sample_averages(ssa)
@@ -107,10 +110,12 @@ function simulate_SSA(x_true0, T, ssa, RUN_SSA)
             push!(X_true_queue, x_true0)
             push!(X_star_queue, x_prime_optimal)
             push!(violation_queue, check_α(ssa.PF.particles))
+            push!(cost_queue, sum(ssa.running_cost(ssa.PF.particles[:,i],u) for i in size(ssa.PF.particles,2)))
 
+            print("Time step: ", t)
             print(", Constraint violation: ", check_α(ssa.PF.particles), "\n")
       end
-      return  X_star_queue, particle_queue, violation_queue
+      return  X_star_queue, particle_queue, violation_queue, cost_queue
 end
 
 function check_α(Xi::Matrix{Float64})
@@ -127,7 +132,7 @@ x_true0 = μ0 .+ sqrt(var0) * randn(size(W,1))
 run_ssa = true
 
 # run a simulation with SSA
-x_star_queue, particle_queue, violation_queue = simulate_SSA(x_true0, T, ssa, run_ssa)
+x_star_queue, particle_queue, violation_queue, cost_queue = simulate_SSA(x_true0, T, ssa, run_ssa)
 
 
 # reset pf and ssa
@@ -135,4 +140,4 @@ pf = ParticleFilter(f, h, W, V, initial_particles, initial_likelihoods)
 ssa = SSA(pf, x->k_cbf(x), N, M, cost, constraint_violation, α)
 
 # run a simulation without SSA
-x_star_queue_noSSA, particle_queue_noSSA, violation_queue_noSSA = simulate_SSA(x_true0, T, ssa, !run_ssa)
+x_star_queue_noSSA, particle_queue_noSSA, violation_queue_noSSA, cost_queue_noSSA = simulate_SSA(x_true0, T, ssa, !run_ssa)

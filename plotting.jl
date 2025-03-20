@@ -44,7 +44,11 @@ animate_gif(particle_queue, x_star_queue, r0, dmin, T, run_ssa)
 animate_gif(particle_queue_noSSA, x_star_queue_noSSA, r0, dmin, T, !run_ssa)
 
 
-plot(1:T, violation_queue, label="SSA", xlabel="Time Step", ylabel="Constraint Violation Rate", title="Constraint Violation vs Time", lw=2)
+plot(1:T, violation_queue, label="SSA", xlabel="Time Step", ylabel="Constraint Violation Rate", lw=2)
 plot!(1:T, violation_queue_noSSA, label="No SSA", lw=2)
 plot!([0, T], [α, α], label="Constraint Violation Limit, α", lw=2, ls=:dash, c=:black)
 savefig("constraint_violation.png")
+
+plot(1:T, cost_queue, label="SSA", xlabel="Time Step", ylabel="Cost", lw=2)
+plot!(1:T, cost_queue_noSSA, label="No SSA", lw=2)
+savefig("cost.png")
